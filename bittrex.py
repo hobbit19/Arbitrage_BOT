@@ -44,7 +44,6 @@ class bittrex(object):
         else:
             return response["message"]
 
-
     def getmarkets(self):
         return self.query('getmarkets')
 
