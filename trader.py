@@ -6,11 +6,11 @@ from poloniex import poloniex
 import config
 
 # 변수선언
-marketcurrency = 'BTC'  # 기준코인
-altcurrency = 'DGB' # 알트코인
+marketcurrency = config.markgetcurrency  # 기준코인
+altcurrency = config.altcurrency # 알트코인
 spread = 0.8  # 차이 1% => 1
-market_bitt = '{0}-{1}'.format(marketcurrency, altcurrency)
-market_polo = '{0}_{1}'.format(marketcurrency, altcurrency)
+bitt_market = '{0}-{1}'.format(marketcurrency, altcurrency)
+polo_market = '{0}_{1}'.format(marketcurrency, altcurrency)
 is_marketcurrency_transfering = False
 is_altcurrency_transfering = False
 bittrex_api = config.bittrex_api
@@ -40,9 +40,9 @@ def send_message(msg=None):
 
 
 def send_message_with_error(message=None):
-    msg = 'error - wait 10 min\n{0}'.format(message)
+    msg = f"⚠️ Error - wait 10 min\n{0}".format(message)
     print(msg)
-    #bot.sendMessage(chat_id=telegram_chat_id, text=msg)
+    bot.sendMessage(chat_id=telegram_chat_id, text=msg)
 
 
 # 잔고조정
@@ -54,8 +54,9 @@ def balancing():
     global is_marketcurrency_transfering
     global is_altcurrency_transfering
 
-    # 이체내역 조회
-
+    # 이체 중 인지 판단
+    # 송금하면 송금플래그를 true 로변경
+    # 송금전의 잔액 기억하고 있다가 송금한 금액만큼(수수료 감안) 증가하면 이체완료로 간주한다
 
     is_marketcurrency_transfering = False
     if not is_marketcurrency_transfering:
@@ -89,8 +90,7 @@ def balancing():
             except:
                 send_message_with_error('error')
 
-
-    # Alt Currency 잔고 조정
+    # Alt Currency 잔고 확인
     is_altcurrency_transfering = False
     if not is_altcurrency_transfering:
         try:
@@ -103,24 +103,45 @@ def balancing():
             polo_altcurrency_bal = 0
         total_altcurrency_bal = bitt_altcurrency_bal + polo_altcurrency_bal
         print('bittrex : {0:8f}{1} / poloniex : {2:8f}{3} '.format(bitt_altcurrency_bal, altcurrency, polo_altcurrency_bal, altcurrency))
-    # to-do:이체 내역 존재여부 확인
+
+    # Alt Currency 잔고 조정
+    if bitt_altcurrency_bal / total_altcurrency_bal > 0.8:
+        try:
+            transfer_amount = bitt_altcurrency_bal - (total_altcurrency_bal / 2)
+            #bitt.withdraw(altcurrency, transfer_amount, polo_altcurrency_address)
+            send_message('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount, altcurrency))
+        except:
+            send_message_with_error('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount,altcurrency))
+    if polo_altcurrency_bal / total_altcurrency_bal > 0.8:
+        try:
+            transfer_amount = polo_altcurrency_bal - (total_altcurrency_bal / 2)
+            #polo.withdraw(altcurrency, transfer_amount, bitt_altcurrency_address)
+            send_message('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount, altcurrency))
+        except:
+            send_message_with_error('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount,altcurrency))
+
+
+# 오더북 조회
+def getorderbook():
+    # Bittrexx 오더북 조회
+    bitt_orderbook = bitt.getorderbook(bitt_market, 'both', 20)
+    bitt_buyorder = bitt_orderbook['buy']
+    bitt_sellorder = bitt_orderbook['sell']
+    polo_orderbook = polo.returnOrderBook(polo_market)
+    polo_buyorder = polo_orderbook['bids']
+    polo_sellorder = polo_orderbook['asks']
     '''
-    #이체내역이 존재하지 않으면
-    if not is_marketcurrency_transfering:
-
-        if bitt_btc_bal / total_btc_bal > 0.7 : #bittrex의BTC가 전체 BTC의 70%를 초과할때
-            #이체금액 계산
-            print('poloniex 로 이체')
-
-        if polo_btc_bal / total_btc_bal > 0.7 : #poloniex의BTC가 전체 BTC의 70%를 초과할때
-            print('bittrex 로 이체')
+    for order in bitt_buyorder:
+        print(float(order['Rate'])*1000) #내림차순
+    print("------------------------------------------")
+    for order in polo_buyorder:   #내림차순
+        print(order[0])
     '''
-    #print(bitt_marketcurrency_bal, polo_marketcurrency_bal)
-
-
-
-##오더북 조회
-
+    for order in bitt_sellorder:
+        print(float(order['Rate'])*1000) #오름차순
+    print("------------------------------------------")
+    for order in polo_sellorder:   #오름차순
+        print(order[0])
 ##오더
 
 '''
@@ -141,4 +162,5 @@ for coin in balances:
 '''
 
 if __name__ == '__main__':
-    balancing()
+    #balancing()
+    getorderbook()
