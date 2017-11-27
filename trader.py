@@ -1,33 +1,37 @@
 # -*- coding: utf-8 -*-
-
 import telegram
-from bittrex import bittrex
-from poloniex import poloniex
+import time
+import sys
 import config
+from exchage_api.bittrex import bittrex
+from exchage_api.poloniex import poloniex
+import util
 
 # 변수선언
 marketcurrency = config.markgetcurrency  # 기준코인
-altcurrency = config.altcurrency # 알트코인
-spread = 0.8  # 차이 1% => 1
-bitt_market = '{0}-{1}'.format(marketcurrency, altcurrency)
-polo_market = '{0}_{1}'.format(marketcurrency, altcurrency)
+#altcurrency = config.altcurrency # 알트코인
+altcurrency = 'DGB' # 알트코인
+spread = 0.8  # 차이 0.8%
+bittrex_market = '{0}-{1}'.format(marketcurrency, altcurrency)
+poloniex_market = '{0}_{1}'.format(marketcurrency, altcurrency)
 is_marketcurrency_transfering = False
 is_altcurrency_transfering = False
 bittrex_api = config.bittrex_api
 bittrex_key = config.bittrex_key
 poloniex_api = config.poloniex_api
 poloniex_key = config.poloniex_key
-bitt_marketcurrency_bal = 0
-polo_marketcurrency_bal = 0
-bitt_altcurrency_bal = 0
-polo_altcurrency_bal = 0
-bitt_marketcurrency_address = '1DAFcmkeQiMWdhAmwKBLmx9pUpM4yak4DC'
-polo_marketcurrency_address = '1J4LrydHhH356J1ykvbXVDsj4a2s2497PP'
-bitt_altcurrency_address = 'DPCgJ15dvMSTVvSKUX1LU1s4RZs5Dk2T8H'
-polo_altcurrency_address = 'DBCLd1NZpKFjc8eo2RgyWL43a6zBkCqTLP'
+bittrex_marketcurrency_bal = 0
+poloniex_marketcurrency_bal = 0
+bittrex_altcurrency_bal = 0
+poloniex_altcurrency_bal = 0
+bittrex_marketcurrency_address = '1DAFcmkeQiMWdhAmwKBLmx9pUpM4yak4DC'
+poloniex_marketcurrency_address = '1J4LrydHhH356J1ykvbXVDsj4a2s2497PP'
+bittrex_altcurrency_address = 'DPCgJ15dvMSTVvSKUX1LU1s4RZs5Dk2T8H'
+poloniex_altcurrency_address = 'DBCLd1NZpKFjc8eo2RgyWL43a6zBkCqTLP'
 telegram_token = config.telegram_token
 telegram_chat_id = config.telegram_chat_id
-
+spread = 0.8 # %
+spread = spread / 100
 bot = telegram.Bot(token=telegram_token)
 # API 객채생성
 bitt = bittrex(bittrex_api, bittrex_key)
@@ -47,10 +51,10 @@ def send_message_with_error(message=None):
 
 # 잔고조정
 def balancing():
-    global bitt_marketcurrency_bal
-    global polo_marketcurrency_bal
-    global bitt_altcurrency_bal
-    global polo_altcurrency_bal
+    global bittrex_marketcurrency_bal
+    global poloniex_marketcurrency_bal
+    global bittrex_altcurrency_bal
+    global poloniex_altcurrency_bal
     global is_marketcurrency_transfering
     global is_altcurrency_transfering
 
@@ -62,30 +66,30 @@ def balancing():
     if not is_marketcurrency_transfering:
         # Market Currency 잔고 조회
         try:
-            bitt_marketcurrency_bal = float(bitt.getbalance(marketcurrency)['Available'])
+            bittrex_marketcurrency_bal = float(bitt.getbalance(marketcurrency)['Available'])
         except:
             print('bittrex get balance error-{0}'.format(bitt.getbalance(marketcurrency)['Available']))
-            bitt_marketcurrency_bal = 0
+            bittrex_marketcurrency_bal = 0
         try:
-            polo_marketcurrency_bal = float(polo.returnBalances()[marketcurrency])
+            poloniex_marketcurrency_bal = float(polo.returnBalances()[marketcurrency])
         except:
             print('poloniex get balance error-{0}'.format(polo.returnBalances()[marketcurrency]))
-            polo_marketcurrency_bal = 0
-        total_marketcurrency_bal = bitt_marketcurrency_bal + polo_marketcurrency_bal
-        print('bittrex : {0:8f}{1} / poloniex : {2:8f}{3}'.format(bitt_marketcurrency_bal, marketcurrency, polo_marketcurrency_bal, marketcurrency))
+            poloniex_marketcurrency_bal = 0
+        total_marketcurrency_bal = bittrex_marketcurrency_bal + poloniex_marketcurrency_bal
+        print('bittrex : {0:8f}{1} / poloniex : {2:8f}{3}'.format(bittrex_marketcurrency_bal, marketcurrency, poloniex_marketcurrency_bal, marketcurrency))
 
         # Market Currency 잔고 조정
-        if bitt_marketcurrency_bal / total_marketcurrency_bal > 0.8:
+        if bittrex_marketcurrency_bal / total_marketcurrency_bal > 0.8:
             try:
-                transfer_amount = bitt_marketcurrency_bal - (total_marketcurrency_bal / 2)
-                #bitt.withdraw(marketcurrency, transfer_amount, polo_marketcurrency_address)
+                transfer_amount = bittrex_marketcurrency_bal - (total_marketcurrency_bal / 2)
+                #bitt.withdraw(marketcurrency, transfer_amount, poloniex_marketcurrency_address)
                 send_message('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount, marketcurrency))
             except:
                 send_message_with_error('error')
-        if polo_marketcurrency_bal / total_marketcurrency_bal > 0.8:
+        if poloniex_marketcurrency_bal / total_marketcurrency_bal > 0.8:
             try:
-                transfer_amount = polo_marketcurrency_bal - (total_marketcurrency_bal / 2)
-                #polo.withdraw(marketcurrency, transfer_amount, bitt_marketcurrency_address)
+                transfer_amount = poloniex_marketcurrency_bal - (total_marketcurrency_bal / 2)
+                #polo.withdraw(marketcurrency, transfer_amount, bittrex_marketcurrency_address)
                 send_message('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount, marketcurrency))
             except:
                 send_message_with_error('error')
@@ -94,54 +98,79 @@ def balancing():
     is_altcurrency_transfering = False
     if not is_altcurrency_transfering:
         try:
-            bitt_altcurrency_bal = float(bitt.getbalance(altcurrency)['Available'])
+            bittrex_altcurrency_bal = float(bitt.getbalance(altcurrency)['Available'])
         except:
-            bitt_altcurrency_bal = 0
+            bittrex_altcurrency_bal = 0
         try:
-            polo_altcurrency_bal = float(polo.returnBalances()[altcurrency])
+            poloniex_altcurrency_bal = float(polo.returnBalances()[altcurrency])
         except:
-            polo_altcurrency_bal = 0
-        total_altcurrency_bal = bitt_altcurrency_bal + polo_altcurrency_bal
-        print('bittrex : {0:8f}{1} / poloniex : {2:8f}{3} '.format(bitt_altcurrency_bal, altcurrency, polo_altcurrency_bal, altcurrency))
+            poloniex_altcurrency_bal = 0
+        total_altcurrency_bal = bittrex_altcurrency_bal + poloniex_altcurrency_bal
+        print('bittrex : {0:8f}{1} / poloniex : {2:8f}{3} '.format(bittrex_altcurrency_bal, altcurrency, poloniex_altcurrency_bal, altcurrency))
 
     # Alt Currency 잔고 조정
-    if bitt_altcurrency_bal / total_altcurrency_bal > 0.8:
+    if bittrex_altcurrency_bal / total_altcurrency_bal > 0.8:
         try:
-            transfer_amount = bitt_altcurrency_bal - (total_altcurrency_bal / 2)
-            #bitt.withdraw(altcurrency, transfer_amount, polo_altcurrency_address)
+            transfer_amount = bittrex_altcurrency_bal - (total_altcurrency_bal / 2)
+            #bitt.withdraw(altcurrency, transfer_amount, poloniex_altcurrency_address)
             send_message('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount, altcurrency))
         except:
-            send_message_with_error('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount,altcurrency))
-    if polo_altcurrency_bal / total_altcurrency_bal > 0.8:
+            send_message_with_error('withdraw to Poloniex : {0:8f}{1}'.format(transfer_amount, altcurrency))
+    if poloniex_altcurrency_bal / total_altcurrency_bal > 0.8:
         try:
-            transfer_amount = polo_altcurrency_bal - (total_altcurrency_bal / 2)
-            #polo.withdraw(altcurrency, transfer_amount, bitt_altcurrency_address)
+            transfer_amount = poloniex_altcurrency_bal - (total_altcurrency_bal / 2)
+            #polo.withdraw(altcurrency, transfer_amount, bittrex_altcurrency_address)
             send_message('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount, altcurrency))
         except:
-            send_message_with_error('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount,altcurrency))
+            send_message_with_error('withdraw to Bittrex : {0:8f}{1}'.format(transfer_amount, altcurrency))
 
 
 # 오더북 조회
 def getorderbook():
     # Bittrexx 오더북 조회
-    bitt_orderbook = bitt.getorderbook(bitt_market, 'both', 20)
-    bitt_buyorder = bitt_orderbook['buy']
-    bitt_sellorder = bitt_orderbook['sell']
-    polo_orderbook = polo.returnOrderBook(polo_market)
-    polo_buyorder = polo_orderbook['bids']
-    polo_sellorder = polo_orderbook['asks']
+    #decimal.getcontext().prec = 8
+    bittrex_orderbook = bitt.getorderbook(bittrex_market, 'both', 1)
+    bittrex_buyorder = bittrex_orderbook['buy']
+    bittrex_sellorder = bittrex_orderbook['sell']
+    #print(bittrex_orderbook)
+    poloniex_orderbook = polo.returnOrderBook(poloniex_market)
+    poloniex_buyorder = poloniex_orderbook['bids']
+    poloniex_sellorder = poloniex_orderbook['asks']
+    #print(poloniex_orderbook)
     '''
-    for order in bitt_buyorder:
+    for order in bittrex_buyorder:
         print(float(order['Rate'])*1000) #내림차순
     print("------------------------------------------")
-    for order in polo_buyorder:   #내림차순
+    for order in poloniex_buyorder:   #내림차순
         print(order[0])
+    
+    for order in bittrex_sellorder:
+
+        print(round(decimal.Decimal(bittrex_sellorder[0]['Rate']), 8)) #오름차순
+    #round(decimal.Decimal(order['Rate']), 8)
+    #print("------------------------------------------")
+    for order in poloniex_sellorder:   #오름차순
+        print(decimal.Decimal(order[0]))
+    
+    print(util.toSatoshi(bittrex_sellorder[0]['Rate']), bittrex_sellorder[0]['Quantity'])
+    print(util.toSatoshi(poloniex_buyorder[0][0]), poloniex_buyorder[0][1])
+    print(util.toSatoshi(bittrex_sellorder[0]['Rate'] - float(poloniex_buyorder[0][0])))
     '''
-    for order in bitt_sellorder:
-        print(float(order['Rate'])*1000) #오름차순
-    print("------------------------------------------")
-    for order in polo_sellorder:   #오름차순
-        print(order[0])
+    bittrex_current_sell = util.toSatoshi(bittrex_sellorder[0]['Rate'])
+    bittrex_current_buy = util.toSatoshi(bittrex_buyorder[0]['Rate'])
+    poloniex_current_sell = util.toSatoshi(poloniex_sellorder[0][0])
+    poloniex_current_buy = util.toSatoshi(poloniex_buyorder[0][0])
+    print('Bittrex buy:', bittrex_current_buy, marketcurrency, 'sell:', bittrex_current_sell, marketcurrency)
+    print('Poloniex buy:', poloniex_current_buy, marketcurrency,  'sell:', poloniex_current_sell, marketcurrency)
+    print('bitt:polo', 1 - bittrex_current_sell/poloniex_current_buy)
+    print('polo:bitt', 1 - bittrex_current_sell / poloniex_current_buy)
+    if poloniex_current_buy > bittrex_current_sell and 1 - bittrex_current_sell/poloniex_current_buy > spread:
+        #print((1 - (bittrex_current_sell/poloniex_current_buy))*100, "%")
+        print(u'💰 Difference : ', round((1 - (bittrex_current_sell / poloniex_current_buy)) * 100, 2), "%", ' / Buy at Bittrex!!')
+
+    if bittrex_current_buy > poloniex_current_sell and 1 - poloniex_current_sell/bittrex_current_buy > spread:
+        print(u'💰 Difference : ', round((1 - (poloniex_current_sell / bittrex_current_buy))*100, 2), "%", ' / Buy at Poloniex')
+
 ##오더
 
 '''
@@ -163,4 +192,11 @@ for coin in balances:
 
 if __name__ == '__main__':
     #balancing()
-    getorderbook()
+    while True:
+        try:
+            getorderbook()
+            time.sleep(10)
+        except:
+            print("⚠️ Bot paused during 1 min -", sys.exc_info())
+            time.sleep(60*1)
+            print("🔆 Bot resumed")
